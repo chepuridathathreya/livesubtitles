@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="te">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Live Captions</title>
+<style>
+  :root { --bg:#000; --fg:#fff; --dim:#8a8a8a; --line:#2c2c2c; --ok:#3ddc84; --warn:#ffb020; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg); }
+  body { font-family: system-ui, 'Noto Sans Telugu', 'Noto Sans Devanagari', 'Nirmala UI', sans-serif;
+         display: flex; flex-direction: column; padding: env(safe-area-inset-top) 14px env(safe-area-inset-bottom); }
+  .meta { font: 11px/1 ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+  header { display: flex; justify-content: space-between; align-items: center; padding: 12px 2px 8px; }
+  .status::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+                    background: var(--warn); margin-right: 6px; }
+  .status.on::before { background: var(--ok); }
+  .langs { display: flex; gap: 8px; margin: 4px 0 8px; }
+  .langs button { flex: 1; padding: 12px 0; font-size: 17px; border-radius: 12px; border: 1px solid #444;
+                  background: transparent; color: #cfcfcf; font-family: inherit; }
+  .langs button.on { background: var(--fg); color: #000; border-color: var(--fg); font-weight: 600; }
+  main { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 16px; padding-bottom: 8px; overflow: hidden; }
+  .old { color: #7d7d7d; font-size: 1.15rem; line-height: 1.6; overflow-wrap: anywhere; }
+  .old:nth-last-child(3) { opacity: .45; } .old:nth-last-child(2) { opacity: .7; }
+  #live { font-size: clamp(1.7rem, 7.2vw, 2.6rem); line-height: 1.5; font-weight: 500; overflow-wrap: anywhere; min-height: 2.4em; }
+  #live.partial { color: #b9b9b9; }
+  #hint { color: var(--dim); font-size: 1.1rem; }
+  footer { display: flex; justify-content: space-between; align-items: center; padding: 8px 2px 12px; gap: 10px; }
+  footer button { background: none; border: 1px solid #444; color: #cfcfcf; border-radius: 10px; padding: 8px 12px;
+                  font: 11px/1 ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
+  #history { position: fixed; inset: 0; background: #000; padding: 14px; display: none; flex-direction: column; z-index: 5; }
+  #history.open { display: flex; }
+  #list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 8px 0; }
+  .row { font-size: 1.3rem; line-height: 1.6; overflow-wrap: anywhere; }
+  .row .meta { display: block; margin-top: 2px; }
+</style>
+</head>
+<body>
+<header>
+  <span class="meta status" id="status">Connecting</span>
+  <span class="meta">Local · not sent online</span>
+</header>
+<div class="langs" id="langs"></div>
+<main id="main">
+  <div id="hint">Say something…</div>
+  <div id="live"></div>
+</main>
+<footer>
+  <span class="meta" id="latency">—</span>
+  <span style="display:flex; gap:8px">
+    <button id="pause">Pause</button>
+    <button id="show-history">History</button>
+  </span>
+</footer>
+<section id="history">
+  <div style="display:flex; justify-content:space-between; align-items:center">
+    <span class="meta">Transcript</span><button id="close-history" style="background:none;border:1px solid #444;color:#ccc;border-radius:10px;padding:8px 12px">Close</button>
+  </div>
+  <div id="list"></div>
+</section>
+<script>
+const LANGS = __LANGUAGES__;
+const key = new URLSearchParams(location.search).get('key') || '';
+const $ = id => document.getElementById(id);
+const state = { language: null, paused: false, currentId: null, olderCount: 0 };
+const MAX_OLD = 3;
+
+function api(path, body) {
+  return fetch(path + '?key=' + encodeURIComponent(key), { method: 'POST', body: JSON.stringify(body) }).catch(() => {});
+}
+function renderLangs() {
+  const box = $('langs'); box.innerHTML = '';
+  for (const [code, label] of Object.entries(LANGS)) {
+    const b = document.createElement('button');
+    b.textContent = label; b.className = code === state.language ? 'on' : '';
+    b.onclick = () => api('/language', { language: code });
+    box.appendChild(b);
+  }
+  document.documentElement.lang = state.language || 'te';
+}
+function pushOld(text) {
+  const main = $('main'), div = document.createElement('div');
+  div.className = 'old'; div.textContent = text;
+  main.insertBefore(div, $('live'));
+  const olds = main.querySelectorAll('.old');
+  if (olds.length > MAX_OLD) olds[0].remove();
+}
+function addHistory(ev) {
+  const row = document.createElement('div'); row.className = 'row';
+  row.textContent = ev.text;
+  const m = document.createElement('span'); m.className = 'meta';
+  m.textContent = ev.language.toUpperCase() + ' · ' + ev.at;
+  row.appendChild(m); $('list').appendChild(row);
+  $('list').scrollTop = $('list').scrollHeight;
+}
+function onCaption(ev) {
+  $('hint').style.display = 'none';
+  const live = $('live');
+  if (state.currentId !== null && state.currentId !== ev.id && live.textContent) {
+    // a new sentence started without a final for the old one: keep what we showed
+    pushOld(live.textContent);
+  }
+  state.currentId = ev.id;
+  live.textContent = ev.text;
+  live.className = ev.final ? '' : 'partial';
+  $('latency').textContent = (ev.final ? 'Delay ' : 'Draft ') + ev.latency_ms + ' ms · ' + ev.language.toUpperCase();
+  if (ev.final) { pushOld(ev.text); live.textContent = ''; state.currentId = null; addHistory(ev); }
+}
+function connect() {
+  const es = new EventSource('/events?key=' + encodeURIComponent(key));
+  es.onopen = () => { $('status').textContent = state.paused ? 'Paused' : 'Listening'; $('status').classList.toggle('on', !state.paused); };
+  es.onerror = () => { $('status').textContent = 'Reconnecting'; $('status').classList.remove('on'); };
+  es.onmessage = e => {
+    const ev = JSON.parse(e.data);
+    if (ev.type === 'state') {
+      state.language = ev.language; state.paused = ev.paused; renderLangs();
+      $('pause').textContent = ev.paused ? 'Resume' : 'Pause';
+      $('status').textContent = ev.paused ? 'Paused' : 'Listening'; $('status').classList.toggle('on', !ev.paused);
+    } else if (ev.type === 'caption') onCaption(ev);
+  };
+}
+$('pause').onclick = () => api('/paused', { paused: !state.paused });
+$('show-history').onclick = () => $('history').classList.add('open');
+$('close-history').onclick = () => $('history').classList.remove('open');
+try { navigator.wakeLock && navigator.wakeLock.request('screen'); } catch (e) {}
+connect();
+</script>
+</body>
+</html>

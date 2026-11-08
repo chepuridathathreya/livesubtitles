@@ -1,0 +1,28 @@
+# Live Subtitles - system requirements (Phase 1: mic speech to captions)
+#
+# MEASURED on the dev laptop (Ryzen 7 5800H, RTX 3060 Laptop 6 GB, Windows 11):
+#   Model large-v3-turbo, GPU fp16: about 2.3 GB VRAM, about 0.6 s per sentence
+#   Model download large-v3-turbo: about 2.5 GB disk (Hugging Face cache)
+#   Python 3.12 venv, 0 dropped audio blocks in live mic test
+#
+# NOT YET MEASURED (estimates, verify before relying on them):
+#   Model large-v3 (full): about 3 GB disk, VRAM expected above turbo
+#   System RAM: 16 GB on dev laptop, minimum not measured
+#   CPU-only speed: not tested, expected much slower than GPU
+#
+# Disk budget (planned): venv with CUDA libs about 3-4 GB + one model 1.5-3 GB
+#   Keep at least 10 GB free on the install drive.
+#
+# GPU: NVIDIA with CUDA 12 support is the tested path. The nvidia-* packages
+#   below are only needed for GPU. CPU-only users can skip them and run with --cpu.
+#
+# Known limits:
+#   Telugu accuracy is weak on Whisper turbo (repetition loops, wrong language guesses)
+#   Language auto-detect is unreliable on clips shorter than 2 seconds
+
+faster-whisper>=1.1.0
+sounddevice>=0.5.0
+numpy>=1.26
+nvidia-cublas-cu12
+nvidia-cudnn-cu12==9.*
+qrcode

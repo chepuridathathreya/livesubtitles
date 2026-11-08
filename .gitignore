@@ -1,0 +1,11 @@
+# local environment and big downloads (see README: setup)
+.venv/
+models/
+vendor/
+# scratch and personal files
+tmp/
+reference/
+.superpowers/
+explain.md
+__pycache__/
+*.pyc
